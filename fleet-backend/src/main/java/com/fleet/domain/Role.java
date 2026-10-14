@@ -1,0 +1,5 @@
+package com.fleet.domain;
+
+public enum Role {
+    SUPER_ADMIN, COMPANY_ADMIN, FLEET_MANAGER, DISPATCHER, DRIVER, MECHANIC, FINANCE, CUSTOMER
+}
