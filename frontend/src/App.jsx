@@ -16,6 +16,7 @@ import Deliveries from './pages/Deliveries'
 import Users from './pages/Users'
 import AuditLogs from './pages/AuditLogs'
 import TrackDelivery from './pages/TrackDelivery'
+import MobileTracker from './pages/MobileTracker'
 
 function Protected({ children }) {
   const { isAuthenticated } = useAuth()
@@ -41,6 +42,7 @@ export default function App() {
       <Route path="/deliveries" element={<Protected><Deliveries /></Protected>} />
       <Route path="/users" element={<Protected><Users /></Protected>} />
       <Route path="/audit-logs" element={<Protected><AuditLogs /></Protected>} />
+      <Route path="/tracker" element={<Protected><MobileTracker /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -39,6 +39,12 @@ public class TripLocation extends BaseEntity {
     @Enumerated(EnumType.STRING)
     public LocationConfidence confidence = LocationConfidence.HIGH;
 
+    @Enumerated(EnumType.STRING)
+    public LocationSource source = LocationSource.DEVICE;
+
+    /** Horizontal accuracy in metres when reported by the GPS source; null if unknown. */
+    public Double accuracy;
+
     @Column(name = "recorded_at")
     public Instant recordedAt = Instant.now();
 }

@@ -15,6 +15,7 @@ const NAV = [
   { to: '/deliveries', label: 'Deliveries' },
   { to: '/users', label: 'Users' },
   { to: '/audit-logs', label: 'Audit Logs' },
+  { to: '/tracker', label: 'Mobile Tracker' },
 ]
 
 export default function Layout({ children }) {

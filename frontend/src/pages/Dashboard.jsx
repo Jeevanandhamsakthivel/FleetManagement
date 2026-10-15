@@ -1,10 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
-import api, { connectTrackingSocket } from '../api'
+import api, { connectTrackingSocket, errorMessage } from '../api'
 import LiveMap, { STATUS_COLORS } from '../components/LiveMap'
 import StatCard from '../components/StatCard'
 import { Badge, Card } from '../components/ui'
 
 const SEVERITY_COLOR = { CRITICAL: 'red', HIGH: 'red', MEDIUM: 'amber', LOW: 'slate' }
+
+function WsIndicator({ status }) {
+  const map = {
+    connected: { color: 'text-green-600', dot: 'bg-green-500', label: 'Live', pulse: true },
+    connecting: { color: 'text-amber-600', dot: 'bg-amber-500', label: 'Connecting…', pulse: true },
+    error: { color: 'text-red-600', dot: 'bg-red-500', label: 'Reconnecting…', pulse: false },
+    disconnected: { color: 'text-red-600', dot: 'bg-red-500', label: 'Reconnecting…', pulse: false },
+  }
+  const s = map[status] || map.connecting
+  return (
+    <span className={`flex items-center gap-1.5 text-xs font-medium ${s.color}`}>
+      <span className={`h-2 w-2 rounded-full ${s.dot} ${s.pulse ? 'animate-pulse' : ''}`} /> {s.label}
+    </span>
+  )
+}
+
 
 export default function Dashboard() {
   const [kpis, setKpis] = useState(null)
@@ -12,6 +28,9 @@ export default function Dashboard() {
   const [geofences, setGeofences] = useState([])
   const [alerts, setAlerts] = useState([])
   const [selected, setSelected] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [wsStatus, setWsStatus] = useState('connecting')
   const socketRef = useRef(null)
 
   async function loadAll() {
@@ -28,22 +47,41 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadAll().catch(() => {})
+    loadAll()
+      .then(() => {
+        setLoadError('')
+      })
+      .catch((err) => {
+        setLoadError(errorMessage(err))
+      })
+      .finally(() => setLoading(false))
     const kpiTimer = setInterval(() => api.get('/dashboard/kpis').then((r) => setKpis(r.data)).catch(() => {}), 8000)
     const alertTimer = setInterval(
       () => api.get('/alerts/open').then((r) => setAlerts(r.data.slice(0, 12))).catch(() => {}),
       10000,
     )
-    socketRef.current = connectTrackingSocket((msg) => {
-      if (msg.type !== 'position') return
-      setVehicles((prev) =>
-        prev.map((v) =>
-          v.id === msg.vehicleId
-            ? { ...v, lastLat: msg.lat, lastLng: msg.lng, lastSpeed: msg.speed, lastHeading: msg.heading, status: msg.status, lastUpdate: msg.ts }
-            : v,
-        ),
-      )
-    })
+    socketRef.current = connectTrackingSocket(
+      (msg) => {
+        if (msg.type !== 'position') return
+        setVehicles((prev) =>
+          prev.map((v) =>
+            v.id === msg.vehicleId
+              ? {
+                  ...v,
+                  lastLat: msg.lat,
+                  lastLng: msg.lng,
+                  lastSpeed: msg.speed,
+                  lastHeading: msg.heading,
+                  status: msg.status,
+                  lastSource: msg.source,
+                  lastUpdate: msg.ts,
+                }
+              : v,
+          ),
+        )
+      },
+      { onStatus: setWsStatus },
+    )
     return () => {
       clearInterval(kpiTimer)
       clearInterval(alertTimer)
@@ -69,10 +107,26 @@ export default function Dashboard() {
           <h1 className="text-xl font-semibold text-slate-900">Fleet Overview</h1>
           <p className="mt-0.5 text-sm text-slate-500">Live positions, utilization and open alerts</p>
         </div>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" /> Live
-        </span>
+        <WsIndicator status={wsStatus} />
       </div>
+
+      {loadError && (
+        <div className="mb-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>Could not load fleet data: {loadError}</span>
+          <button
+            onClick={() => {
+              setLoading(true)
+              loadAll()
+                .then(() => setLoadError(''))
+                .catch((err) => setLoadError(errorMessage(err)))
+                .finally(() => setLoading(false))
+            }}
+            className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium hover:bg-red-100"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         <StatCard label="Vehicles" value={kpis?.totalVehicles} accent="blue" />
@@ -88,16 +142,30 @@ export default function Dashboard() {
           <Card className="p-0">
             <div className="flex items-center justify-between px-4 py-3">
               <div className="text-sm font-semibold text-slate-700">Live Fleet Map</div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {Object.entries(STATUS_COLORS).map(([s, c]) => (
                   <span key={s} className="flex items-center gap-1 text-xs text-slate-500">
                     <span className="h-2 w-2 rounded-full" style={{ background: c }} />
                     {s}
                   </span>
                 ))}
+                <span className="flex items-center gap-1 text-xs text-amber-600">
+                  <span className="h-2 w-2 rounded-full border-2 border-dashed border-amber-500" />
+                  Simulated
+                </span>
               </div>
             </div>
-            <LiveMap vehicles={vehicles} geofences={geofences} height={440} onSelect={setSelected} selectedId={selected?.id} />
+            <p className="px-4 pb-2 text-xs text-slate-400">
+              Solid markers are real GPS; dashed markers are simulated (dev). Red rings mark stale signals.
+            </p>
+            <LiveMap
+              vehicles={vehicles}
+              geofences={geofences}
+              height={440}
+              onSelect={setSelected}
+              selectedId={selected?.id}
+              loading={loading}
+            />
           </Card>
         </div>
 

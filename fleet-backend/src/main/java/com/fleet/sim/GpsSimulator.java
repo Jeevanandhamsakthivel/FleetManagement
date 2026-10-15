@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.fleet.domain.LocationConfidence;
+import com.fleet.domain.LocationSource;
 import com.fleet.domain.Vehicle;
 import com.fleet.repo.VehicleRepository;
 import com.fleet.service.TrackingService;
@@ -51,6 +52,12 @@ public class GpsSimulator {
                     || v.status == com.fleet.domain.VehicleStatus.MAINTENANCE) {
                 continue;
             }
+            // Never overwrite genuine GPS: leave vehicles that recently reported from
+            // a real mobile/device source to their own readings.
+            if (v.lastSource == LocationSource.MOBILE && v.lastUpdate != null
+                    && v.lastUpdate.isAfter(Instant.now().minusSeconds(120))) {
+                continue;
+            }
             double[] s = state.computeIfAbsent(v.id, id -> new double[]{random.nextDouble() * 360, 30 + random.nextDouble() * 30});
 
             // occasional turn
@@ -80,7 +87,8 @@ public class GpsSimulator {
             }
 
             TrackingPayload payload = new TrackingPayload(v.id, v.code, newLat, newLng, speed,
-                    (int) Math.round(heading), speed > 0.5, Instant.now(), LocationConfidence.HIGH);
+                    (int) Math.round(heading), speed > 0.5, Instant.now(), LocationConfidence.HIGH,
+                    null, LocationSource.SIMULATED);
             try {
                 tracking.ingest(payload);
             } catch (Exception ignored) {

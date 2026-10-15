@@ -8,7 +8,8 @@ export default function RouteMap({ points = [], height = 360 }) {
 
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return
-    const map = L.map(containerRef.current).setView([12.9716, 77.5946], 11)
+    // Neutral world view; the actual track points below determine the visible area.
+    const map = L.map(containerRef.current).setView([0, 0], 2)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,

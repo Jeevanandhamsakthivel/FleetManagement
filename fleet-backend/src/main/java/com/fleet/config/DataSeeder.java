@@ -24,6 +24,7 @@ import com.fleet.domain.FuelType;
 import com.fleet.domain.Geofence;
 import com.fleet.domain.GeofenceType;
 import com.fleet.domain.LocationConfidence;
+import com.fleet.domain.LocationSource;
 import com.fleet.domain.MaintenanceRecord;
 import com.fleet.domain.MaintenanceType;
 import com.fleet.domain.Role;
@@ -230,6 +231,8 @@ public class DataSeeder implements CommandLineRunner {
         v.lastIgnition = status == VehicleStatus.MOVING || status == VehicleStatus.IDLE;
         v.lastUpdate = Instant.now();
         v.confidence = LocationConfidence.HIGH;
+        // Seed coordinates are synthetic demo data, not real device GPS.
+        v.lastSource = LocationSource.SIMULATED;
         return vehicles.save(v);
     }
 

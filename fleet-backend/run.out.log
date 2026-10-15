@@ -1,3 +1,33 @@
+[INFO] Scanning for projects...
+[INFO] Loaded 24080 auto-discovered prefixes for remote repository central (prefixes-central.txt)
+[INFO] 
+[INFO] ----------------------< com.fleet:fleet-backend >-----------------------
+[INFO] Building fleet-backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:4.1.1:run (default-cli) > test-compile @ fleet-backend >>>
+[INFO] 
+[INFO] --- resources:3.5.0:resources (default-resources) @ fleet-backend ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] Copying 0 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.15.0:compile (default-compile) @ fleet-backend ---
+[INFO] Loaded 74 auto-discovered prefixes for remote repository apache.snapshots (prefixes-apache.snapshots.txt)
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.5.0:testResources (default-testResources) @ fleet-backend ---
+[INFO] skip non existing resourceDirectory C:\Users\kk437\OneDrive\Desktop\FleetManagement\fleet-backend\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.15.0:testCompile (default-testCompile) @ fleet-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:4.1.1:run (default-cli) < test-compile @ fleet-backend <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:4.1.1:run (default-cli) @ fleet-backend ---
+[INFO] Loaded 50 auto-discovered prefixes for remote repository ow2-snapshot (prefixes-ow2-snapshot.txt)
+[INFO] Attaching agents: []
 
   .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -8,21 +38,21 @@
 
  :: Spring Boot ::                (v4.1.1)
 
-2026-10-13T21:41:21.961+05:30  INFO 19232 --- [fleet-backend] [           main] com.fleet.FleetBackendApplication        : Starting FleetBackendApplication v0.0.1-SNAPSHOT using Java 25.0.4.1 with PID 19232 (C:\Users\kk437\OneDrive\Desktop\FleetManagement\fleet-backend\target\fleet-backend-0.0.1-SNAPSHOT.jar started by kk437 in C:\Users\kk437\OneDrive\Desktop\FleetManagement\fleet-backend)
-2026-10-13T21:41:21.966+05:30  INFO 19232 --- [fleet-backend] [           main] com.fleet.FleetBackendApplication        : No active profile set, falling back to 1 default profile: "default"
-2026-10-13T21:41:22.941+05:30  INFO 19232 --- [fleet-backend] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
-2026-10-13T21:41:23.287+05:30  INFO 19232 --- [fleet-backend] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 334 ms. Found 16 JPA repository interfaces.
-2026-10-13T21:41:27.411+05:30  INFO 19232 --- [fleet-backend] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
-2026-10-13T21:41:27.526+05:30  INFO 19232 --- [fleet-backend] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
-2026-10-13T21:41:27.531+05:30  INFO 19232 --- [fleet-backend] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.24]
-2026-10-13T21:41:27.750+05:30  INFO 19232 --- [fleet-backend] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 5711 ms
-2026-10-13T21:41:29.268+05:30  INFO 19232 --- [fleet-backend] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
-2026-10-13T21:41:29.506+05:30  INFO 19232 --- [fleet-backend] [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.5.Final
-2026-10-13T21:41:31.670+05:30  INFO 19232 --- [fleet-backend] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
-2026-10-13T21:41:31.888+05:30  INFO 19232 --- [fleet-backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
-2026-10-13T21:41:32.509+05:30  INFO 19232 --- [fleet-backend] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:fleetdb user=SA
-2026-10-13T21:41:32.517+05:30  INFO 19232 --- [fleet-backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
-2026-10-13T21:41:32.732+05:30  INFO 19232 --- [fleet-backend] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+2026-10-14T21:17:12.697+05:30  INFO 27668 --- [fleet-backend] [           main] com.fleet.FleetBackendApplication        : Starting FleetBackendApplication using Java 25.0.4.1 with PID 27668 (C:\Users\kk437\OneDrive\Desktop\FleetManagement\fleet-backend\target\classes started by kk437 in C:\Users\kk437\OneDrive\Desktop\FleetManagement\fleet-backend)
+2026-10-14T21:17:12.702+05:30  INFO 27668 --- [fleet-backend] [           main] com.fleet.FleetBackendApplication        : No active profile set, falling back to 1 default profile: "default"
+2026-10-14T21:17:13.820+05:30  INFO 27668 --- [fleet-backend] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-10-14T21:17:14.002+05:30  INFO 27668 --- [fleet-backend] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 164 ms. Found 16 JPA repository interfaces.
+2026-10-14T21:17:14.966+05:30  INFO 27668 --- [fleet-backend] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-10-14T21:17:14.985+05:30  INFO 27668 --- [fleet-backend] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-10-14T21:17:14.986+05:30  INFO 27668 --- [fleet-backend] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.24]
+2026-10-14T21:17:15.064+05:30  INFO 27668 --- [fleet-backend] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 2294 ms
+2026-10-14T21:17:15.397+05:30  INFO 27668 --- [fleet-backend] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-10-14T21:17:15.503+05:30  INFO 27668 --- [fleet-backend] [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.5.Final
+2026-10-14T21:17:16.055+05:30  INFO 27668 --- [fleet-backend] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-10-14T21:17:16.155+05:30  INFO 27668 --- [fleet-backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-10-14T21:17:16.434+05:30  INFO 27668 --- [fleet-backend] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:fleetdb user=SA
+2026-10-14T21:17:16.480+05:30  INFO 27668 --- [fleet-backend] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-10-14T21:17:16.592+05:30  INFO 27668 --- [fleet-backend] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
 	Database JDBC URL [jdbc:h2:mem:fleetdb]
 	Database driver: H2 JDBC Driver
 	Database dialect: H2Dialect
@@ -34,11 +64,15 @@
 	Pool: DataSourceConnectionProvider
 	Minimum pool size: undefined/unknown
 	Maximum pool size: undefined/unknown
-2026-10-13T21:41:37.186+05:30  INFO 19232 --- [fleet-backend] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
-2026-10-13T21:41:37.526+05:30  INFO 19232 --- [fleet-backend] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
-2026-10-13T21:41:38.058+05:30  INFO 19232 --- [fleet-backend] [           main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
-2026-10-13T21:41:45.302+05:30  INFO 19232 --- [fleet-backend] [           main] o.s.b.h.a.H2ConsoleAutoConfiguration     : H2 console available at '/h2-console'. Database available at 'jdbc:h2:mem:fleetdb'
-2026-10-13T21:41:45.563+05:30  INFO 19232 --- [fleet-backend] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
-2026-10-13T21:41:45.619+05:30  INFO 19232 --- [fleet-backend] [           main] com.fleet.FleetBackendApplication        : Started FleetBackendApplication in 24.166 seconds (process running for 24.783)
-2026-10-13T21:41:48.035+05:30  INFO 19232 --- [fleet-backend] [           main] com.fleet.config.DataSeeder              : Seed complete. Login with admin/admin123, manager/manager123, dispatch/dispatch123, driver/driver123
-2026-10-13T21:42:15.655+05:30  INFO 19232 --- [fleet-backend] [   scheduling-1] com.fleet.service.TrackingService        : ALERT [MEDIUM] GEOFENCE_EXIT - VH-103 exited geofence 'Bengaluru City Center'
+2026-10-14T21:17:18.355+05:30  INFO 27668 --- [fleet-backend] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-10-14T21:17:18.476+05:30  INFO 27668 --- [fleet-backend] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-10-14T21:17:18.567+05:30  INFO 27668 --- [fleet-backend] [           main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-10-14T21:17:20.212+05:30  INFO 27668 --- [fleet-backend] [           main] o.s.b.h.a.H2ConsoleAutoConfiguration     : H2 console available at '/h2-console'. Database available at 'jdbc:h2:mem:fleetdb'
+2026-10-14T21:17:20.326+05:30  INFO 27668 --- [fleet-backend] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-10-14T21:17:20.338+05:30  INFO 27668 --- [fleet-backend] [           main] com.fleet.FleetBackendApplication        : Started FleetBackendApplication in 8.297 seconds (process running for 8.821)
+2026-10-14T21:17:21.528+05:30  INFO 27668 --- [fleet-backend] [           main] com.fleet.config.DataSeeder              : Seed complete. Login with admin/admin123, manager/manager123, dispatch/dispatch123, driver/driver123
+2026-10-14T21:17:26.379+05:30  INFO 27668 --- [fleet-backend] [   scheduling-1] com.fleet.service.TrackingService        : ALERT [MEDIUM] GEOFENCE_EXIT - VH-103 exited geofence 'Bengaluru City Center'
+2026-10-14T21:20:27.089+05:30  INFO 27668 --- [fleet-backend] [nio-8080-exec-3] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-10-14T21:20:27.091+05:30  INFO 27668 --- [fleet-backend] [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-10-14T21:20:27.095+05:30  INFO 27668 --- [fleet-backend] [nio-8080-exec-3] o.s.web.servlet.DispatcherServlet        : Completed initialization in 3 ms
+2026-10-14T21:20:54.003+05:30  INFO 27668 --- [fleet-backend] [io-8080-exec-10] com.fleet.service.TrackingService        : ALERT [MEDIUM] GEOFENCE_EXIT - VH-101 exited geofence 'Bengaluru City Center'

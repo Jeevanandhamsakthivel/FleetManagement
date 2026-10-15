@@ -13,6 +13,7 @@ import com.fleet.domain.AlertSeverity;
 import com.fleet.domain.AlertType;
 import com.fleet.domain.Geofence;
 import com.fleet.domain.LocationConfidence;
+import com.fleet.domain.LocationSource;
 import com.fleet.domain.Trip;
 import com.fleet.domain.TripLocation;
 import com.fleet.domain.TripStatus;
@@ -65,6 +66,12 @@ public class TrackingService {
         double speed = p.speedKmh() != null ? p.speedKmh() : 0.0;
         int heading = p.heading() != null ? p.heading() : (v.lastHeading != null ? v.lastHeading : 0);
         boolean ignition = p.ignition() != null ? p.ignition() : speed > 0;
+        LocationSource source = p.source() != null ? p.source() : LocationSource.DEVICE;
+        LocationConfidence confidence = p.confidence() != null ? p.confidence() : confidenceFromAccuracy(p.accuracy());
+
+        // Out-of-order protection: a late/duplicate reading older than the latest known
+        // position must never overwrite newer data. We still persist it for history/playback.
+        boolean isLatest = v.lastUpdate == null || !ts.isBefore(v.lastUpdate);
 
         Double prevLat = v.lastLat;
         Double prevLng = v.lastLng;
@@ -82,8 +89,15 @@ public class TrackingService {
         loc.heading = heading;
         loc.ignition = ignition;
         loc.recordedAt = ts;
-        loc.confidence = p.confidence() != null ? p.confidence() : LocationConfidence.HIGH;
+        loc.confidence = confidence;
+        loc.source = source;
+        loc.accuracy = p.accuracy();
         locations.save(loc);
+
+        if (!isLatest) {
+            // Historical record stored, but do not move the live marker backwards.
+            return loc;
+        }
 
         if (hadPrev) {
             double distKm = haversine(prevLat, prevLng, lat, lng);
@@ -107,7 +121,8 @@ public class TrackingService {
         v.lastHeading = heading;
         v.lastIgnition = ignition;
         v.lastUpdate = ts;
-        v.confidence = loc.confidence;
+        v.confidence = confidence;
+        v.lastSource = source;
         vehicles.save(v);
 
         Long driverId = active != null && active.driverId != null ? active.driverId
@@ -122,8 +137,22 @@ public class TrackingService {
             evaluateGeofences(v, prevLat, prevLng, lat, lng, driverId);
         }
 
-        broadcast(v, lat, lng, speed, heading, ts);
+        broadcast(v, lat, lng, speed, heading, ts, source);
         return loc;
+    }
+
+    /** Maps reported horizontal accuracy (metres) to a coarse confidence bucket. */
+    private static LocationConfidence confidenceFromAccuracy(Double accuracy) {
+        if (accuracy == null) {
+            return LocationConfidence.HIGH;
+        }
+        if (accuracy <= 25) {
+            return LocationConfidence.HIGH;
+        }
+        if (accuracy <= 100) {
+            return LocationConfidence.MEDIUM;
+        }
+        return LocationConfidence.LOW;
     }
 
     private void evaluateGeofences(Vehicle v, double prevLat, double prevLng, double lat, double lng, Long driverId) {
@@ -213,12 +242,13 @@ public class TrackingService {
         return result;
     }
 
-    private void broadcast(Vehicle v, double lat, double lng, double speed, int heading, Instant ts) {
+    private void broadcast(Vehicle v, double lat, double lng, double speed, int heading, Instant ts,
+                           LocationSource source) {
         String json = String.format(
                 "{\"type\":\"position\",\"vehicleId\":%d,\"code\":\"%s\",\"lat\":%s,\"lng\":%s,"
-                        + "\"speed\":%s,\"heading\":%d,\"status\":\"%s\",\"ts\":\"%s\"}",
-                v.id, v.code, lat, lng, speed, heading, v.status, ts);
-        ws.broadcast(json);
+                        + "\"speed\":%s,\"heading\":%d,\"status\":\"%s\",\"source\":\"%s\",\"ts\":\"%s\"}",
+                v.id, v.code, lat, lng, speed, heading, v.status, source, ts);
+        ws.broadcast(json, v.companyId);
     }
 
     public static double haversine(double lat1, double lon1, double lat2, double lon2) {
