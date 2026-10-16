@@ -45,7 +45,36 @@ public class TrackingController {
         if (payload.latitude() == null || payload.longitude() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "latitude and longitude are required");
         }
+        if (payload.latitude() < -90 || payload.latitude() > 90) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "latitude must be between -90 and 90");
+        }
+        if (payload.longitude() < -180 || payload.longitude() > 180) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "longitude must be between -180 and 180");
+        }
+        if (payload.accuracy() != null && payload.accuracy() < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "accuracy must not be negative");
+        }
+        // Reject updates for vehicles outside the caller's company.
+        Vehicle v = resolveOwnedVehicle(payload);
+        if (v == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown vehicle");
+        }
         return tracking.ingest(payload);
+    }
+
+    private Vehicle resolveOwnedVehicle(TrackingPayload payload) {
+        Vehicle v = payload.vehicleId() != null
+                ? vehicles.findById(payload.vehicleId()).orElse(null)
+                : payload.vehicleCode() != null
+                        ? vehicles.findByCode(payload.vehicleCode()).orElse(null)
+                        : null;
+        if (v == null) {
+            return null;
+        }
+        if (!v.companyId.equals(currentUser.companyId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your vehicle");
+        }
+        return v;
     }
 
     @GetMapping("/live")

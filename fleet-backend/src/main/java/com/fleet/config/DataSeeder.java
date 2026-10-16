@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -86,6 +87,14 @@ public class DataSeeder implements CommandLineRunner {
         this.documents = documents;
         this.encoder = encoder;
     }
+
+    /**
+     * When the GPS simulator is disabled (e.g. the real-tracking MySQL profile) seeded
+     * vehicles carry no synthetic coordinates, so the map shows an honest empty state
+     * until a genuine mobile/device GPS position arrives.
+     */
+    @Value("${app.gps.simulator.enabled:true}")
+    private boolean simulatorEnabled;
 
     @Override
     public void run(String... args) {
@@ -224,15 +233,22 @@ public class DataSeeder implements CommandLineRunner {
         v.fuelType = fuelType;
         v.status = status;
         v.odometer = 10000 + Math.random() * 80000;
-        v.lastLat = lat;
-        v.lastLng = lng;
-        v.lastSpeed = status == VehicleStatus.MOVING ? 35.0 : 0.0;
-        v.lastHeading = (int) (Math.random() * 360);
-        v.lastIgnition = status == VehicleStatus.MOVING || status == VehicleStatus.IDLE;
-        v.lastUpdate = Instant.now();
-        v.confidence = LocationConfidence.HIGH;
-        // Seed coordinates are synthetic demo data, not real device GPS.
-        v.lastSource = LocationSource.SIMULATED;
+        if (simulatorEnabled) {
+            // Synthetic demo positions - only used while the simulator is enabled.
+            v.lastLat = lat;
+            v.lastLng = lng;
+            v.lastSpeed = status == VehicleStatus.MOVING ? 35.0 : 0.0;
+            v.lastHeading = (int) (Math.random() * 360);
+            v.lastIgnition = status == VehicleStatus.MOVING || status == VehicleStatus.IDLE;
+            v.lastUpdate = Instant.now();
+            v.confidence = LocationConfidence.HIGH;
+            // Seed coordinates are synthetic demo data, not real device GPS.
+            v.lastSource = LocationSource.SIMULATED;
+        } else {
+            // No genuine GPS yet - leave the position empty so the UI shows its empty state.
+            v.lastLat = null;
+            v.lastLng = null;
+        }
         return vehicles.save(v);
     }
 
