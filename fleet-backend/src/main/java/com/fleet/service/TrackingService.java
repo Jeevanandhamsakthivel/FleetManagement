@@ -5,6 +5,8 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ import com.fleet.domain.AlertType;
 import com.fleet.domain.Geofence;
 import com.fleet.domain.LocationConfidence;
 import com.fleet.domain.LocationSource;
+import com.fleet.domain.RouteState;
 import com.fleet.domain.Trip;
 import com.fleet.domain.TripLocation;
 import com.fleet.domain.TripStatus;
@@ -41,6 +44,10 @@ public class TrackingService {
     private final AlertRepository alerts;
     private final VehicleDriverAssignmentRepository assignments;
     private final TrackingWebSocketHandler ws;
+
+    /** A trip with no valid GPS reading for this long is flagged GPS_SIGNAL_LOST. */
+    @Value("${app.tracking.gps-lost-seconds:180}")
+    private long gpsLostSeconds;
 
     public TrackingService(VehicleRepository vehicles, TripRepository trips, TripLocationRepository locations,
                            GeofenceRepository geofences, AlertRepository alerts,
@@ -78,7 +85,7 @@ public class TrackingService {
         Double prevSpeed = v.lastSpeed;
         boolean hadPrev = prevLat != null && prevLng != null;
 
-        Trip active = trips.findFirstByVehicleIdAndStatus(v.id, TripStatus.IN_PROGRESS).orElse(null);
+        Trip active = trips.findFirstByVehicleIdAndStatusOrderByIdDesc(v.id, TripStatus.IN_PROGRESS).orElse(null);
 
         TripLocation loc = new TripLocation();
         loc.vehicleId = v.id;
@@ -122,6 +129,7 @@ public class TrackingService {
         v.lastIgnition = ignition;
         v.lastUpdate = ts;
         v.confidence = confidence;
+        v.lastAccuracy = p.accuracy();
         v.lastSource = source;
         vehicles.save(v);
 
@@ -137,8 +145,113 @@ public class TrackingService {
             evaluateGeofences(v, prevLat, prevLng, lat, lng, driverId);
         }
 
+        evaluateRoute(v, active, lat, lng, p.accuracy(), driverId, ts);
+
         broadcast(v, lat, lng, speed, heading, ts, source);
         return loc;
+    }
+
+    /**
+     * Compares a valid GPS reading against the active trip's planned road route and manages
+     * the ON ROUTE / ROUTE DEVIATION / GPS SIGNAL LOST state machine. A deviation alert only
+     * fires after several consecutive out-of-corridor readings (configurable per trip) and
+     * accounts for the reported GPS accuracy so a single coarse fix cannot raise a false alarm.
+     */
+    private void evaluateRoute(Vehicle v, Trip trip, double lat, double lng, Double accuracy,
+                               Long driverId, Instant ts) {
+        if (trip == null || trip.routeGeometry == null || trip.routeGeometry.isBlank()) {
+            return;
+        }
+        List<double[]> route = RouteGeometry.fromJson(trip.routeGeometry);
+        if (route.size() < 2) {
+            return;
+        }
+        trip.lastGpsAt = ts;
+        double distance = RouteGeometry.distanceToRouteM(route, lat, lng);
+        trip.lastDeviationM = distance;
+
+        int threshold = trip.deviationThresholdM != null ? trip.deviationThresholdM : 500;
+        int confirmations = trip.deviationConfirmations != null ? trip.deviationConfirmations : 3;
+        // Poor GPS fixes (large reported accuracy) get extra slack so noise is tolerated.
+        double effective = threshold + Math.min(accuracy != null ? Math.max(0, accuracy) : 0, 150);
+        boolean outside = distance > effective;
+        RouteState prev = trip.routeState;
+
+        if (outside) {
+            trip.deviationStreak = (trip.deviationStreak != null ? trip.deviationStreak : 0) + 1;
+            if (trip.deviationStreak >= confirmations && prev != RouteState.DEVIATED) {
+                trip.routeState = RouteState.DEVIATED;
+                trip.lastDeviationAt = ts;
+                raiseAlert(v, driverId, null, AlertType.ROUTE_DEVIATION, AlertSeverity.HIGH,
+                        v.code + " is " + Math.round(distance) + " m off the planned route", lat, lng, nz(v.lastSpeed));
+                broadcastRouteState(v, trip, distance, threshold);
+            }
+        } else {
+            trip.deviationStreak = 0;
+            if (prev == RouteState.DEVIATED) {
+                trip.routeState = RouteState.ON_ROUTE;
+                acknowledge(v.id, AlertType.ROUTE_DEVIATION);
+                broadcastRouteState(v, trip, distance, threshold);
+            } else if (prev == RouteState.GPS_LOST) {
+                trip.routeState = RouteState.ON_ROUTE;
+                acknowledge(v.id, AlertType.GPS_SIGNAL_LOST);
+                broadcastRouteState(v, trip, distance, threshold);
+            } else if (prev == null || prev == RouteState.COMPLETED) {
+                trip.routeState = RouteState.ON_ROUTE;
+            }
+        }
+        trips.save(trip);
+    }
+
+    /** Auto-closes open alerts of a type once the vehicle recovers (returns to the corridor). */
+    private void acknowledge(Long vehicleId, AlertType type) {
+        List<Alert> open = alerts.findByVehicleIdAndTypeAndAcknowledgedFalse(vehicleId, type);
+        for (Alert a : open) {
+            a.acknowledged = true;
+            a.acknowledgedAt = Instant.now();
+            alerts.save(a);
+        }
+    }
+
+    /**
+     * Flags active trips whose device has gone quiet (no GPS for {@code gpsLostSeconds}),
+     * so a stalled phone/GPS shows as GPS SIGNAL LOST instead of looking permanently on route.
+     */
+    @Scheduled(fixedRateString = "${app.tracking.gps-lost-check-ms:60000}")
+    @Transactional
+    public void checkGpsSignalLoss() {
+        Instant now = Instant.now();
+        for (Trip t : trips.findAllByStatus(TripStatus.IN_PROGRESS)) {
+            if (t.routeGeometry == null || t.routeGeometry.isBlank() || t.routeState == RouteState.GPS_LOST) {
+                continue;
+            }
+            Instant last = t.lastGpsAt != null ? t.lastGpsAt : t.actualStart;
+            if (last == null || !now.isAfter(last.plusSeconds(gpsLostSeconds))) {
+                continue;
+            }
+            t.routeState = RouteState.GPS_LOST;
+            trips.save(t);
+            if (t.vehicleId != null) {
+                Vehicle v = vehicles.findById(t.vehicleId).orElse(null);
+                if (v != null) {
+                    raiseAlert(v, t.driverId, null, AlertType.GPS_SIGNAL_LOST, AlertSeverity.MEDIUM,
+                            v.code + " GPS signal lost (no update for " + (gpsLostSeconds / 60) + " min)",
+                            nz(v.lastLat), nz(v.lastLng), nz(v.lastSpeed));
+                    broadcastRouteState(v, t, null, t.deviationThresholdM);
+                }
+            }
+        }
+    }
+
+    private void broadcastRouteState(Vehicle v, Trip t, Double distanceM, Integer thresholdM) {
+        String state = t.routeState != null ? t.routeState.name() : RouteState.ON_ROUTE.name();
+        String json = String.format(
+                "{\"type\":\"route-state\",\"vehicleId\":%d,\"tripId\":%s,\"state\":\"%s\","
+                        + "\"distanceM\":%s,\"thresholdM\":%s,\"ts\":\"%s\"}",
+                v.id, t.id == null ? "null" : t.id.toString(), state,
+                distanceM == null ? "null" : String.format("%.1f", distanceM),
+                thresholdM == null ? "null" : thresholdM.toString(), Instant.now());
+        ws.broadcast(json, v.companyId);
     }
 
     /** Maps reported horizontal accuracy (metres) to a coarse confidence bucket. */
@@ -246,8 +359,10 @@ public class TrackingService {
                            LocationSource source) {
         String json = String.format(
                 "{\"type\":\"position\",\"vehicleId\":%d,\"code\":\"%s\",\"lat\":%s,\"lng\":%s,"
-                        + "\"speed\":%s,\"heading\":%d,\"status\":\"%s\",\"source\":\"%s\",\"ts\":\"%s\"}",
-                v.id, v.code, lat, lng, speed, heading, v.status, source, ts);
+                        + "\"speed\":%s,\"heading\":%d,\"status\":\"%s\",\"source\":\"%s\","
+                        + "\"accuracy\":%s,\"ts\":\"%s\"}",
+                v.id, v.code, lat, lng, speed, heading, v.status, source,
+                v.lastAccuracy == null ? "null" : v.lastAccuracy, ts);
         ws.broadcast(json, v.companyId);
     }
 

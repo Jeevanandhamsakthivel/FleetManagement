@@ -3,7 +3,7 @@ import api, { errorMessage } from '../api'
 import RouteMap from '../components/RouteMap'
 import { Badge, Button, Field, Input, Modal, PageHeader, Select, Table } from '../components/ui'
 
-const empty = { vehicleId: '', driverId: '', origin: '', destination: '', plannedDistanceKm: 10 }
+const empty = { vehicleId: '', driverId: '', origin: '', destination: '', plannedDistanceKm: 10, deviationThresholdM: 500 }
 
 export default function Trips() {
   const [trips, setTrips] = useState([])
@@ -37,6 +37,7 @@ export default function Trips() {
         vehicleId: form.vehicleId ? Number(form.vehicleId) : null,
         driverId: form.driverId ? Number(form.driverId) : null,
         plannedDistanceKm: Number(form.plannedDistanceKm) || null,
+        deviationThresholdM: Number(form.deviationThresholdM) || 500,
       })
       setForm(null)
       load()
@@ -57,11 +58,37 @@ export default function Trips() {
   }
 
   async function viewRoute(t) {
-    const { data } = await api.get(`/trips/${t.id}/locations`)
-    setRoute({ trip: t, points: data })
+    const [loc, route] = await Promise.all([
+      api.get(`/trips/${t.id}/locations`),
+      api.get(`/trips/${t.id}/route`).catch(() => ({ data: null })),
+    ])
+    setRoute({ trip: t, points: loc.data, planned: route.data })
+  }
+
+  async function replanRoute(id) {
+    setError('')
+    try {
+      const { data } = await api.post(`/trips/${id}/route`)
+      setRoute((r) => (r ? { ...r, planned: data } : r))
+      load()
+    } catch (err) {
+      setError(errorMessage(err))
+    }
+  }
+
+  async function saveCorridor(id, deviationThresholdM) {
+    setError('')
+    try {
+      const { data } = await api.put(`/trips/${id}/corridor`, { deviationThresholdM })
+      setRoute((r) => (r ? { ...r, planned: data } : r))
+      load()
+    } catch (err) {
+      setError(errorMessage(err))
+    }
   }
 
   const statusColor = { IN_PROGRESS: 'blue', COMPLETED: 'green', PLANNED: 'slate', CANCELLED: 'red' }
+  const routeStateColor = { ON_ROUTE: 'green', DEVIATED: 'red', GPS_LOST: 'amber', COMPLETED: 'slate' }
 
   return (
     <div>
@@ -82,6 +109,9 @@ export default function Trips() {
             <td className="px-4 py-2.5 text-slate-600">{name(t.driverId, drivers, 'fullName')}</td>
             <td className="px-4 py-2.5">
               <Badge color={statusColor[t.status]}>{t.status}</Badge>
+              {t.status === 'IN_PROGRESS' && t.routeState && (
+                <Badge color={routeStateColor[t.routeState]}>{t.routeState.replace('_', ' ')}</Badge>
+              )}
             </td>
             <td className="px-4 py-2.5 text-slate-600">{(t.distanceKm || 0).toFixed(1)} km</td>
             <td className="px-4 py-2.5 text-xs text-slate-400">
@@ -143,6 +173,13 @@ export default function Trips() {
                 onChange={(e) => setForm({ ...form, plannedDistanceKm: e.target.value })}
               />
             </Field>
+            <Field label="Route corridor (± metres)">
+              <Input
+                type="number"
+                value={form.deviationThresholdM}
+                onChange={(e) => setForm({ ...form, deviationThresholdM: e.target.value })}
+              />
+            </Field>
             {error && <div className="col-span-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
             <div className="col-span-2 flex justify-end gap-2 pt-1">
               <Button variant="ghost" type="button" onClick={() => setForm(null)}>
@@ -156,8 +193,43 @@ export default function Trips() {
 
       {route && (
         <Modal title={`Route — ${route.trip.origin} → ${route.trip.destination}`} onClose={() => setRoute(null)} wide>
-          <RouteMap points={route.points} height={420} />
-          <p className="mt-2 text-xs text-slate-400">{route.points.length} GPS points recorded for this trip</p>
+          <RouteMap
+            points={route.points}
+            route={route.planned?.geometry}
+            corridorM={route.planned?.corridorM}
+            state={route.planned?.state}
+            height={420}
+          />
+          {route.planned?.geometry?.length > 1 ? (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <span>
+                Planned road route via <b>{route.planned.provider}</b> ·{' '}
+                {route.planned.distanceKm != null ? `${route.planned.distanceKm.toFixed(1)} km` : '—'} ·{' '}
+                {route.points.length} GPS points recorded
+              </span>
+              <span className="flex items-center gap-2">
+                Corridor
+                <select
+                  defaultValue={route.planned.corridorM || 500}
+                  onChange={(e) => saveCorridor(route.trip.id, Number(e.target.value))}
+                  className="rounded-md border border-slate-300 px-2 py-1"
+                >
+                  {[200, 300, 500, 1000, 2000].map((m) => (
+                    <option key={m} value={m}>
+                      ±{m} m
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+              <span>No planned road route yet (routing unavailable or origin/destination not resolvable).</span>
+              <Button variant="subtle" onClick={() => replanRoute(route.trip.id)}>
+                Plan route
+              </Button>
+            </div>
+          )}
         </Modal>
       )}
     </div>

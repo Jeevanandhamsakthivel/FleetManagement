@@ -62,6 +62,10 @@ public class Vehicle extends BaseEntity {
     @Enumerated(EnumType.STRING)
     public LocationConfidence confidence;
 
+    /** Reported horizontal accuracy (metres) of the latest fix; used for the map accuracy circle. */
+    @Column(name = "last_accuracy")
+    public Double lastAccuracy;
+
     /** Provenance of the latest location so the UI can distinguish simulated vs real GPS. */
     @Enumerated(EnumType.STRING)
     @Column(name = "last_source")

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import api, { connectTrackingSocket, errorMessage } from '../api'
-import LiveMap, { STATUS_COLORS } from '../components/LiveMap'
+import LiveMap, { STATUS_COLORS, locationAge } from '../components/LiveMap'
 import StatCard from '../components/StatCard'
+import { routeStateMeta } from '../components/geo'
 import { Badge, Card } from '../components/ui'
 
 const SEVERITY_COLOR = { CRITICAL: 'red', HIGH: 'red', MEDIUM: 'amber', LOW: 'slate' }
@@ -27,6 +28,8 @@ export default function Dashboard() {
   const [vehicles, setVehicles] = useState([])
   const [geofences, setGeofences] = useState([])
   const [alerts, setAlerts] = useState([])
+  const [routes, setRoutes] = useState([])
+  const [drivers, setDrivers] = useState([])
   const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -34,16 +37,20 @@ export default function Dashboard() {
   const socketRef = useRef(null)
 
   async function loadAll() {
-    const [k, v, g, a] = await Promise.all([
+    const [k, v, g, a, r, d] = await Promise.all([
       api.get('/dashboard/kpis'),
       api.get('/vehicles'),
       api.get('/geofences'),
       api.get('/alerts/open'),
+      api.get('/trips/active-routes'),
+      api.get('/drivers'),
     ])
     setKpis(k.data)
     setVehicles(v.data)
     setGeofences(g.data)
     setAlerts(a.data.slice(0, 12))
+    setRoutes(r.data)
+    setDrivers(d.data)
   }
 
   useEffect(() => {
@@ -60,31 +67,50 @@ export default function Dashboard() {
       () => api.get('/alerts/open').then((r) => setAlerts(r.data.slice(0, 12))).catch(() => {}),
       10000,
     )
+    const routeTimer = setInterval(
+      () => api.get('/trips/active-routes').then((r) => setRoutes(r.data)).catch(() => {}),
+      15000,
+    )
     socketRef.current = connectTrackingSocket(
       (msg) => {
-        if (msg.type !== 'position') return
-        setVehicles((prev) =>
-          prev.map((v) =>
-            v.id === msg.vehicleId
-              ? {
-                  ...v,
-                  lastLat: msg.lat,
-                  lastLng: msg.lng,
-                  lastSpeed: msg.speed,
-                  lastHeading: msg.heading,
-                  status: msg.status,
-                  lastSource: msg.source,
-                  lastUpdate: msg.ts,
-                }
-              : v,
-          ),
-        )
+        if (msg.type === 'position') {
+          setVehicles((prev) =>
+            prev.map((v) =>
+              v.id === msg.vehicleId
+                ? {
+                    ...v,
+                    lastLat: msg.lat,
+                    lastLng: msg.lng,
+                    lastSpeed: msg.speed,
+                    lastHeading: msg.heading,
+                    status: msg.status,
+                    lastSource: msg.source,
+                    lastAccuracy: msg.accuracy ?? v.lastAccuracy,
+                    lastUpdate: msg.ts,
+                  }
+                : v,
+            ),
+          )
+        } else if (msg.type === 'route-state') {
+          setRoutes((prev) =>
+            prev.map((r) =>
+              r.vehicleId === msg.vehicleId
+                ? { ...r, state: msg.state, lastDeviationM: msg.distanceM }
+                : r,
+            ),
+          )
+          // A fresh deviation/GPS-loss event should surface in the alert list promptly.
+          if (msg.state === 'DEVIATED' || msg.state === 'GPS_LOST') {
+            api.get('/alerts/open').then((r) => setAlerts(r.data.slice(0, 12))).catch(() => {})
+          }
+        }
       },
       { onStatus: setWsStatus },
     )
     return () => {
       clearInterval(kpiTimer)
       clearInterval(alertTimer)
+      clearInterval(routeTimer)
       socketRef.current?.close()
     }
   }, [])
@@ -99,6 +125,14 @@ export default function Dashboard() {
       ]
     : []
   const total = breakdown.reduce((s, b) => s + b.value, 0)
+
+  const vehicleById = new Map(vehicles.map((v) => [v.id, v]))
+  const routeByVehicle = new Map(routes.map((r) => [r.vehicleId, r]))
+  const routeAlerts = routes.filter((r) => r.state === 'DEVIATED' || r.state === 'GPS_LOST')
+  const liveSelected = selected ? vehicles.find((v) => v.id === selected.id) || selected : null
+  const selectedRoute = liveSelected ? routeByVehicle.get(liveSelected.id) : null
+  const selectedDriver =
+    selectedRoute?.driverId != null ? drivers.find((d) => d.id === selectedRoute.driverId) : null
 
   return (
     <div>
@@ -125,6 +159,31 @@ export default function Dashboard() {
           >
             Retry
           </button>
+        </div>
+      )}
+
+      {routeAlerts.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {routeAlerts.map((r) => {
+            const meta = routeStateMeta(r.state)
+            const v = vehicleById.get(r.vehicleId)
+            return (
+              <div
+                key={r.tripId}
+                className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium"
+                style={{ background: `${meta.color}1a`, color: meta.color }}
+              >
+                <span>
+                  <b>{v?.registrationNumber || v?.code || `Vehicle ${r.vehicleId}`}</b> — {meta.label}
+                  {r.state === 'DEVIATED' && r.lastDeviationM != null
+                    ? ` (${Math.round(r.lastDeviationM)} m off a ${r.corridorM || 500} m corridor)`
+                    : ''}
+                  {r.origin ? ` on ${r.origin} → ${r.destination}` : ''}
+                </span>
+                <span className="text-xs">Trip #{r.tripId}</span>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -157,15 +216,46 @@ export default function Dashboard() {
             </div>
             <p className="px-4 pb-2 text-xs text-slate-400">
               Solid markers are real GPS; dashed markers are simulated (dev). Red rings mark stale signals.
+              Shaded corridors follow each active trip's planned road route; blue circles show reported GPS accuracy.
             </p>
             <LiveMap
               vehicles={vehicles}
               geofences={geofences}
+              routes={routes}
               height={440}
               onSelect={setSelected}
               selectedId={selected?.id}
               loading={loading}
             />
+            {liveSelected && (
+              <div className="border-t border-slate-100 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-slate-700">
+                    {liveSelected.registrationNumber || liveSelected.code}
+                    {selectedRoute && (
+                      <span className="ml-2 text-xs font-medium" style={{ color: routeStateMeta(selectedRoute.state).color }}>
+                        {routeStateMeta(selectedRoute.state).label}
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => setSelected(null)} className="text-xs text-slate-400 hover:text-slate-600">
+                    Clear
+                  </button>
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
+                  <span>Status: <b className="text-slate-700">{liveSelected.status}</b></span>
+                  <span>Speed: <b className="text-slate-700">{liveSelected.lastSpeed != null ? `${Math.round(liveSelected.lastSpeed)} km/h` : '—'}</b></span>
+                  <span>Updated: <b className="text-slate-700">{locationAge(liveSelected.lastUpdate) || 'never'}</b></span>
+                  <span>GPS: <b className="text-slate-700">{liveSelected.lastAccuracy != null ? `±${Math.round(liveSelected.lastAccuracy)} m` : 'n/a'}</b></span>
+                  {selectedRoute && (
+                    <span className="col-span-2 sm:col-span-4">
+                      Trip: <b className="text-slate-700">{selectedRoute.origin} → {selectedRoute.destination}</b>
+                      {selectedDriver ? ` · Driver: ${selectedDriver.fullName}` : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </Card>
         </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import L from 'leaflet'
+import { bufferPolyline, routeStateMeta } from './geo'
 
 export const STATUS_COLORS = {
   MOVING: '#16a34a',
@@ -31,7 +32,7 @@ export function locationAge(lastUpdate) {
   return `${hrs}h ${mins % 60}m ago`
 }
 
-function popupHtml(v) {
+function popupHtml(v, routeState) {
   const reg = v.registrationNumber || v.code
   const speed = v.lastSpeed != null ? `${Math.round(v.lastSpeed)} km/h` : 'n/a'
   const age = locationAge(v.lastUpdate)
@@ -39,14 +40,17 @@ function popupHtml(v) {
   const source = v.lastSource || 'DEVICE'
   const sourceLabel = source === 'SIMULATED' ? 'SIMULATED' : source === 'MOBILE' ? 'GPS' : 'GPS'
   const stale = isStale(v.lastUpdate)
+  const meta = routeState ? routeStateMeta(routeState) : null
   return (
     `<b>${reg}</b>` +
     (v.code !== reg ? `<br/>${v.code}` : '') +
     `<br/>${v.status}` +
     `<br/>${speed}` +
+    (v.lastAccuracy != null ? `<br/>&plusmn;${Math.round(v.lastAccuracy)} m GPS` : '') +
     `<br/>Updated ${age || 'never'}` +
     `<br/><span style="font-size:11px;color:#64748b">${exact}</span>` +
     `<br/><span style="font-size:11px;font-weight:600;color:${source === 'SIMULATED' ? '#d97706' : '#16a34a'}">${sourceLabel}</span>` +
+    (meta ? `<br/><span style="font-size:11px;font-weight:700;color:${meta.color}">${meta.label}</span>` : '') +
     (stale ? '<br/><span style="font-size:11px;color:#dc2626">Stale (no recent signal)</span>' : '')
   )
 }
@@ -59,6 +63,7 @@ function popupHtml(v) {
 export default function LiveMap({
   vehicles = [],
   geofences = [],
+  routes = [],
   center = null,
   zoom = null,
   height = 460,
@@ -70,8 +75,18 @@ export default function LiveMap({
   const mapRef = useRef(null)
   const markerLayerRef = useRef(null)
   const geofenceLayerRef = useRef(null)
+  const routeLayerRef = useRef(null)
   const markersRef = useRef(new Map())
   const fittedKeysRef = useRef(null)
+
+  // route state per vehicle, keyed by vehicleId, for marker popups.
+  const routeStateByVehicle = useMemo(() => {
+    const m = new Map()
+    for (const r of routes) {
+      if (r.vehicleId != null) m.set(r.vehicleId, r.state)
+    }
+    return m
+  }, [routes])
 
   // Latest valid GPS coordinates only.
   const located = useMemo(
@@ -94,8 +109,9 @@ export default function LiveMap({
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
     }).addTo(map)
-    markerLayerRef.current = L.layerGroup().addTo(map)
     geofenceLayerRef.current = L.layerGroup().addTo(map)
+    routeLayerRef.current = L.layerGroup().addTo(map)
+    markerLayerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
     return () => {
       map.remove()
@@ -125,41 +141,81 @@ export default function LiveMap({
   }, [geofences])
 
   useEffect(() => {
+    const layer = routeLayerRef.current
+    if (!layer) return
+    layer.clearLayers()
+    for (const r of routes) {
+      const geometry = r.geometry
+      if (!Array.isArray(geometry) || geometry.length < 2) continue
+      const meta = routeStateMeta(r.state)
+      const corridor = r.corridorM || 500
+      const ring = bufferPolyline(geometry, corridor)
+      if (ring.length > 2) {
+        L.polygon(ring, { color: meta.color, weight: 1, fillColor: meta.color, fillOpacity: 0.08 })
+          .bindPopup(`Corridor &plusmn;${corridor} m - ${meta.label}`)
+          .addTo(layer)
+      }
+      L.polyline(geometry, { color: meta.color, weight: 4, opacity: 0.85 })
+        .bindPopup(`Planned route (${meta.label})`)
+        .addTo(layer)
+    }
+  }, [routes])
+
+  useEffect(() => {
     const layer = markerLayerRef.current
     const map = mapRef.current
     if (!layer || !map) return
     const seen = new Set()
     for (const v of located) {
       seen.add(v.id)
+      const state = routeStateByVehicle.get(v.id)
       const color = STATUS_COLORS[v.status] || '#64748b'
       const simulated = v.lastSource === 'SIMULATED'
       const stale = isStale(v.lastUpdate)
       const radius = selectedId === v.id ? 11 : 8
+      // Ring colour reflects route state so deviations/GPS loss stand out from fleet status.
+      const ringColor =
+        state === 'DEVIATED' ? '#dc2626' : state === 'GPS_LOST' ? '#f59e0b' : stale ? '#dc2626' : '#fff'
       const style = {
         fillColor: color,
         radius,
         dashArray: simulated ? '4 4' : undefined,
         fillOpacity: stale ? 0.35 : 1,
-        color: stale ? '#dc2626' : '#fff',
-        weight: 2,
+        color: ringColor,
+        weight: state === 'DEVIATED' ? 4 : 2,
       }
-      const existing = markersRef.current.get(v.id)
-      if (existing) {
-        existing.setLatLng([v.lastLat, v.lastLng])
-        existing.setStyle(style)
-        existing.setRadius(radius)
-        existing.setPopupContent(popupHtml(v))
+      const entry = markersRef.current.get(v.id)
+      if (entry) {
+        entry.marker.setLatLng([v.lastLat, v.lastLng])
+        entry.marker.setStyle(style)
+        entry.marker.setRadius(radius)
+        entry.marker.setPopupContent(popupHtml(v, state))
+        if (entry.circle) {
+          entry.circle.setLatLng([v.lastLat, v.lastLng])
+          entry.circle.setRadius(v.lastAccuracy || 0)
+        }
       } else {
         const marker = L.circleMarker([v.lastLat, v.lastLng], { color: '#fff', weight: 2, ...style })
-        marker.bindPopup(popupHtml(v))
+        marker.bindPopup(popupHtml(v, state))
         marker.on('click', () => onSelect && onSelect(v))
         marker.addTo(layer)
-        markersRef.current.set(v.id, marker)
+        let circle = null
+        if (v.lastAccuracy != null && v.lastAccuracy > 0) {
+          circle = L.circle([v.lastLat, v.lastLng], {
+            radius: v.lastAccuracy,
+            color: '#0ea5e9',
+            weight: 1,
+            fillColor: '#0ea5e9',
+            fillOpacity: 0.07,
+          }).addTo(layer)
+        }
+        markersRef.current.set(v.id, { marker, circle })
       }
     }
-    for (const [id, marker] of markersRef.current.entries()) {
+    for (const [id, entry] of markersRef.current.entries()) {
       if (!seen.has(id)) {
-        layer.removeLayer(marker)
+        layer.removeLayer(entry.marker)
+        if (entry.circle) layer.removeLayer(entry.circle)
         markersRef.current.delete(id)
       }
     }
@@ -174,7 +230,7 @@ export default function LiveMap({
         animate: false,
       })
     }
-  }, [located, selectedId, onSelect])
+  }, [located, selectedId, onSelect, routeStateByVehicle])
 
   const empty = !loading && located.length === 0
 

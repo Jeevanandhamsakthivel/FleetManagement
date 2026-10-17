@@ -17,5 +17,8 @@ public interface TripRepository extends JpaRepository<Trip, Long> {
 
     Optional<Trip> findFirstByVehicleIdAndStatus(Long vehicleId, TripStatus status);
 
+    /** Newest in-progress trip for a vehicle (a vehicle may have stale active rows from older data). */
+    Optional<Trip> findFirstByVehicleIdAndStatusOrderByIdDesc(Long vehicleId, TripStatus status);
+
     long countByCompanyIdAndStatus(Long companyId, TripStatus status);
 }

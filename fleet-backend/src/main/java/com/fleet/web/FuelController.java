@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.fleet.domain.FuelRecord;
+import com.fleet.domain.Vehicle;
 import com.fleet.repo.FuelRecordRepository;
+import com.fleet.repo.VehicleRepository;
 import com.fleet.security.CurrentUser;
 
 @RestController
@@ -22,10 +24,12 @@ import com.fleet.security.CurrentUser;
 public class FuelController {
 
     private final FuelRecordRepository fuel;
+    private final VehicleRepository vehicles;
     private final CurrentUser currentUser;
 
-    public FuelController(FuelRecordRepository fuel, CurrentUser currentUser) {
+    public FuelController(FuelRecordRepository fuel, VehicleRepository vehicles, CurrentUser currentUser) {
         this.fuel = fuel;
+        this.vehicles = vehicles;
         this.currentUser = currentUser;
     }
 
@@ -42,6 +46,13 @@ public class FuelController {
         if (body.vehicleId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "vehicleId is required");
         }
+        requireOwnedVehicle(body.vehicleId);
+        if (body.quantity == null || body.quantity <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "quantity (litres) must be greater than zero");
+        }
+        if (body.cost == null || body.cost < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "cost must not be negative");
+        }
         return fuel.save(body);
     }
 
@@ -54,7 +65,17 @@ public class FuelController {
         if (body.vehicleId == null) {
             body.vehicleId = f.vehicleId;
         }
+        requireOwnedVehicle(body.vehicleId);
         return fuel.save(body);
+    }
+
+    /** Guards against attaching a fuel record to another company's vehicle. */
+    private void requireOwnedVehicle(Long vehicleId) {
+        Vehicle v = vehicles.findById(vehicleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown vehicle"));
+        if (!v.companyId.equals(currentUser.companyId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your vehicle");
+        }
     }
 
     @DeleteMapping("/{id}")
